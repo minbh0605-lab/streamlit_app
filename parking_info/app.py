@@ -260,7 +260,7 @@ if uploaded_file is not None:
                 cheapest["1일 최대요금"]
             )
 
-    else:
+        else:
 
         st.warning("검색 결과가 없습니다.")
         # ----------------------------
@@ -317,7 +317,7 @@ if uploaded_file is not None:
 
         st.pydeck_chart(deck)
 
-    else:
+        else:
 
         st.warning("지도에 표시할 위치 정보가 없습니다.")
 
@@ -344,7 +344,7 @@ if uploaded_file is not None:
             use_container_width=True
         )
 
-    else:
+        else:
 
         st.info("무료 주차장이 없습니다.")
 
@@ -372,7 +372,7 @@ if uploaded_file is not None:
             use_container_width=True
         )
 
-    else:
+        else:
 
         st.info("유료 주차장이 없습니다.")
 
@@ -531,6 +531,6 @@ st.caption("Developed with Streamlit")
 # 예외 처리
 # ----------------------------
 
-else:
+    else:
 
     st.warning("CSV 파일을 업로드하세요.")

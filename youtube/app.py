@@ -1,11 +1,33 @@
 import os
 import re
+import subprocess
 import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.express as px
 import streamlit as st
 from googleapiclient.discovery import build
 from wordcloud import WordCloud
+
+# ----------------------------------------------------
+# 0. 한글 폰트 자동 설치 함수 (Streamlit Cloud 전용)
+# ----------------------------------------------------
+@st.cache_resource
+def install_korean_font():
+    """Streamlit Cloud(Linux) 환경에서 나눔 폰트를 자동으로 설치합니다."""
+    try:
+        # 리눅스 패키지 관리자로 fonts-nanum 설치
+        subprocess.run(["apt-get", "update"], check=True)
+        subprocess.run(["apt-get", "install", "-y", "fonts-nanum"], check=True)
+        
+        # matplotlib 폰트 캐시 삭제
+        import matplotlib.font_manager as fm
+        fm._rebuild() if hasattr(fm, '_rebuild') else None
+    except Exception:
+        # 로컬(Windows/Mac) 실행 시 패키지 설치 실패를 무시함
+        pass
+
+# 폰트 설치 실행
+install_korean_font()
 
 # 페이지 기본 설정
 st.set_page_config(
@@ -15,7 +37,7 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------
-# 1. API 키 불러오기 (Streamlit Secrets 사용)
+# 1. API 키 불러오기 (Streamlit Secrets)
 # ----------------------------------------------------
 if "YOUTUBE_API_KEY" in st.secrets:
     API_KEY = st.secrets["YOUTUBE_API_KEY"]
@@ -27,7 +49,7 @@ else:
 # 2. 헬퍼 함수 정의
 # ----------------------------------------------------
 def extract_video_id(url: str) -> str:
-    """유튜브 URL에서 Video ID만 추출하는 함수"""
+    """유튜브 URL에서 Video ID 추출"""
     regex = r"(?:v=|\/([0-9A-Za-z_-]{11}).*[\?&]v=|^you\.tu\/|embed\/|shorts\/|\/v\/|https?:\/\/(?:www\.)?youtube\.com\/watch\?v=)([^\"&?\/\s]{11})"
     match = re.search(regex, url)
     return match.group(1) if match else None
@@ -76,13 +98,14 @@ def fetch_youtube_comments(video_id: str, max_results: int = 200) -> pd.DataFram
 
 
 def generate_wordcloud(text: str):
-    """한글 워드클라우드 생성"""
-    # 한글 전처리 (한글 및 공백 외 제거)
+    """시스템에 설치된 나눔고딕 폰트를 이용해 워드클라우드 생성"""
     clean_text = re.sub(r"[^가-힣\s]", "", text)
 
-    font_path = "NanumGothic.ttf"
+    # Linux 패키지로 설치되는 나눔고딕 기본 경로 지정
+    font_path = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
+    
+    # 해당 경로에 폰트가 없을 경우 기본 시스템 폰트 탐색
     if not os.path.exists(font_path):
-        st.warning("⚠️ NanumGothic.ttf 폰트 파일이 없어 기본 폰트로 출력됩니다.")
         font_path = None
 
     wc = WordCloud(
@@ -100,14 +123,13 @@ def generate_wordcloud(text: str):
 
 
 # ----------------------------------------------------
-# 3. 메인 UI 및 앱 로직
+# 3. 메인 UI
 # ----------------------------------------------------
 st.title("🎬 유튜브 댓글 분석기")
 st.caption("유튜브 영상의 댓글을 수집하고 다각도로 시각화해 드립니다.")
 
 st.markdown("---")
 
-# 입력을 위한 Side/Main 분리
 col_input1, col_input2 = st.columns([3, 1])
 
 with col_input1:
@@ -122,7 +144,7 @@ if st.button("댓글 분석 시작", type="primary"):
     else:
         video_id = extract_video_id(url_input)
         if not video_id:
-            st.error("유효하지 않은 유튜브 URL입니다. 확인 후 다시 입력하세요.")
+            st.error("유효하지 않은 유튜브 URL입니다.")
         else:
             with st.spinner("댓글을 가져오는 중입니다..."):
                 df_comments = fetch_youtube_comments(video_id, max_results=max_comments)
@@ -132,7 +154,7 @@ if st.button("댓글 분석 시작", type="primary"):
             else:
                 st.success(f"총 {len(df_comments)}개의 댓글을 성공적으로 수집했습니다!")
 
-                # --- 1. 대시보드 지표 ---
+                # 1. 지표
                 col1, col2, col3 = st.columns(3)
                 col1.metric("수집된 댓글 수", f"{len(df_comments)}개")
                 col2.metric("총 좋아요 수", f"{df_comments['like_count'].sum():,}개")
@@ -140,8 +162,8 @@ if st.button("댓글 분석 시작", type="primary"):
 
                 st.markdown("---")
 
-                # --- 2. 한글 워드 클라우드 ---
-                st.subheader("☁️ 워드 클라우드 (주요 단어 시각화)")
+                # 2. 한글 워드 클라우드
+                st.subheader("☁️ 워드 클라우드")
                 all_text = " ".join(df_comments["comment"].tolist())
                 if len(all_text.strip()) > 0:
                     fig_wc = generate_wordcloud(all_text)
@@ -151,11 +173,11 @@ if st.button("댓글 분석 시작", type="primary"):
 
                 st.markdown("---")
 
-                # --- 3. 인터랙티브 그래프 (Plotly) ---
+                # 3. 그래프 (Plotly)
                 col_chart1, col_chart2 = st.columns(2)
 
                 with col_chart1:
-                    st.subheader("👍 좋아요를 많이 받은 상위 댓글 Top 5")
+                    st.subheader("👍 좋아요 상위 댓글 Top 5")
                     top_liked = df_comments.nlargest(5, "like_count")[["author", "like_count", "comment"]]
                     fig_bar = px.bar(
                         top_liked,
@@ -181,15 +203,14 @@ if st.button("댓글 분석 시작", type="primary"):
                     )
                     st.plotly_chart(fig_hist, use_container_width=True)
 
-                # --- 4. 데이터 테이블 및 다운로드 ---
+                # 4. 데이터 표 및 CSV 다운로드
                 st.markdown("---")
                 st.subheader("📋 전체 댓글 목록")
                 st.dataframe(df_comments[["author", "comment", "like_count", "published_at"]], use_container_width=True)
 
-                # CSV 다운로드 기능
                 csv_data = df_comments.to_csv(index=False, encoding="utf-8-sig")
                 st.download_button(
-                    label="📥 분석 데이터 CSV로 다운로드",
+                    label="📥 분석 데이터 CSV 다운로드",
                     data=csv_data,
                     file_name=f"youtube_comments_{video_id}.csv",
                     mime="text/csv"

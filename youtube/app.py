@@ -37,13 +37,21 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------
-# 1. API 키 불러오기 (Streamlit Secrets)
+# 1. API 키 불러오기 (Secrets 우선 -> 없으면 사이드바 입력)
 # ----------------------------------------------------
+API_KEY = None
+
+# Secrets에 키가 있는지 확인
 if "YOUTUBE_API_KEY" in st.secrets:
     API_KEY = st.secrets["YOUTUBE_API_KEY"]
 else:
-    st.error("🔑 Secrets에서 'YOUTUBE_API_KEY'를 찾을 수 없습니다.")
-    st.stop()
+    # Secrets에 없을 경우 사이드바에서 사용자에게 직접 입력받음
+    st.sidebar.title("🔑 설정")
+    API_KEY = st.sidebar.text_input("YouTube API Key 입력", type="password")
+    
+    if not API_KEY:
+        st.warning("👈 왼쪽 사이드바에 YouTube API Key를 입력하거나 Secrets를 설정해 주세요.")
+        st.stop()
 
 # ----------------------------------------------------
 # 2. 헬퍼 함수 정의

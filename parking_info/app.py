@@ -259,8 +259,7 @@ if uploaded_file is not None:
                 "1일 최대요금 :",
                 cheapest["1일 최대요금"]
             )
-
-        else:
+    else:
 
         st.warning("검색 결과가 없습니다.")
         # ----------------------------

@@ -6,14 +6,31 @@ import pandas as pd
 import numpy as np
 
 # 페이지 기본 설정
-st.set_page_config(page_title="스마트 주식 분석 대시보드", page_icon="📈", layout="wide")
+st.set_page_config(
+    page_title="스마트 주식 분석 대시보드",
+    page_icon="📈",
+    layout="wide"
+)
 
 # --- 사이드바 설정 ---
 st.sidebar.header("📌 기본 설정")
-ticker_symbol = st.sidebar.text_input("기준 종목 티커 (예: AAPL, NVDA, 005930.KS)", value="AAPL")
+ticker_symbol = st.sidebar.text_input(
+    "기준 종목 티커 (예: AAPL, NVDA, 005930.KS)", 
+    value="AAPL"
+)
 
-period_options = {"1개월": "1mo", "3개월": "3mo", "6개월": "6mo", "1년": "1y", "5년": "5y"}
-selected_period_label = st.sidebar.selectbox("조회 기간", list(period_options.keys()), index=3)
+period_options = {
+    "1개월": "1mo", 
+    "3개월": "3mo", 
+    "6개월": "6mo", 
+    "1년": "1y", 
+    "5년": "5y"
+}
+selected_period_label = st.sidebar.selectbox(
+    "조회 기간", 
+    list(period_options.keys()), 
+    index=3
+)
 period = period_options[selected_period_label]
 
 st.sidebar.subheader("📊 기술적 지표")
@@ -57,21 +74,58 @@ try:
     st.markdown("---")
 
     # --- 탭 구성 ---
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 차트 분석", "🔮 미래 가격 예측", "⚖️ 종목 비교", "📋 기업 정보"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 차트 분석", 
+        "🔮 미래 가격 예측", 
+        "⚖️ 종목 비교", 
+        "📋 기업 정보"
+    ])
 
     # TAB 1: 차트 분석
     with tab1:
         rows = 2 if show_rsi else 1
         row_heights = [0.7, 0.3] if show_rsi else [1.0]
 
-        fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=row_heights)
-        fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name="주가"), row=1, col=1)
+        fig = make_subplots(
+            rows=rows, 
+            cols=1, 
+            shared_xaxes=True, 
+            vertical_spacing=0.05, 
+            row_heights=row_heights
+        )
+        
+        fig.add_trace(
+            go.Candlestick(
+                x=df.index, 
+                open=df['Open'], 
+                high=df['High'], 
+                low=df['Low'], 
+                close=df['Close'], 
+                name="주가"
+            ), 
+            row=1, col=1
+        )
 
         if show_ma:
             df['MA20'] = df['Close'].rolling(window=20).mean()
             df['MA60'] = df['Close'].rolling(window=60).mean()
-            fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], mode='lines', name='MA 20', line=dict(color='orange', width=1.5)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], mode='lines', name='MA 60', line=dict(color='green', width=1.5)), row=1, col=1)
+            
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df['MA20'], 
+                    mode='lines', name='MA 20', 
+                    line=dict(color='orange', width=1.5)
+                ), 
+                row=1, col=1
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df['MA60'], 
+                    mode='lines', name='MA 60', 
+                    line=dict(color='green', width=1.5)
+                ), 
+                row=1, col=1
+            )
 
         if show_rsi:
             delta = df['Close'].diff()
@@ -80,8 +134,7 @@ try:
             rs = gain / loss
             df['RSI'] = 100 - (100 / (1 + rs))
 
-            fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], mode='lines', name='RSI (14)', line=dict(color='purple', width=1.5)), row=2, col=1)
-            fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-            fig.add_hline(y=30, line_dash="dash", line_color="blue", row=2, col=1)
-
-        fig.update_layout(height=550, xaxis_rangeslider_visible=False, margin=dict(l=20, r=20, t=2
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df['RSI'], 
+                    mode='lines', name='RSI (14)',

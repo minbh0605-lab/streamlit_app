@@ -7,7 +7,7 @@ import numpy as np
 
 # 페이지 기본 설정
 st.set_page_config(
-    page_title="스마트 주식 분석 대시보드",
+    page_title="스마트 주식 분석 & 백테스팅 대시보드",
     page_icon="📈",
     layout="wide"
 )
@@ -54,6 +54,17 @@ try:
         st.error("데이터를 불러올 수 없습니다. 티커명을 확인해 주세요.")
         st.stop()
 
+    # 지표 자동 계산 (이동평균선 및 RSI)
+    df['MA20'] = df['Close'].rolling(window=20).mean()
+    df['MA60'] = df['Close'].rolling(window=60).mean()
+
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+
+    # --- 타이틀 및 지표 ---
     company_name = info.get("longName", ticker_symbol)
     st.title(f"📈 {company_name} ({ticker_symbol.upper()})")
 
@@ -73,11 +84,43 @@ try:
     col3.metric("52주 최저가", f"{info.get('fiftyTwoWeekLow', 'N/A')}")
     col4.metric("PER", f"{info.get('trailingPE', 'N/A')}")
 
+    # ==========================================
+    # 🔔 매수/매도 실시간 신호 감지 알림 배너
+    # ==========================================
+    latest_rsi = df['RSI'].iloc[-1]
+    ma20_curr = df['MA20'].iloc[-1]
+    ma60_curr = df['MA60'].iloc[-1]
+    ma20_prev = df['MA20'].iloc[-2]
+    ma60_prev = df['MA60'].iloc[-2]
+
+    is_golden_cross = (ma20_prev < ma60_prev) and (ma20_curr >= ma60_curr)
+    is_dead_cross = (ma20_prev > ma60_prev) and (ma20_curr <= ma60_curr)
+
+    signals = []
+    if is_golden_cross:
+        signals.append("🚨 [골든크로스 발생] 20일 이동평균선이 60일선을 상향 돌파했습니다! (매수 신호)")
+    if latest_rsi <= 30:
+        signals.append(f"🚨 [과매도 구간] RSI 지표가 {latest_rsi:.1f}로 30 이하입니다! (매수 관점)")
+    if is_dead_cross:
+        signals.append("⚠️ [데드크로스 발생] 20일 이동평균선이 60일선을 하향 이탈했습니다! (매도 신호)")
+    if latest_rsi >= 70:
+        signals.append(f"⚠️ [과열 구간] RSI 지표가 {latest_rsi:.1f}로 70 이상입니다! (매도 관점)")
+
+    if signals:
+        for sig in signals:
+            if "매수" in sig:
+                st.success(sig)
+            else:
+                st.warning(sig)
+    else:
+        st.info("ℹ️ 현재 특이한 매수/매도 기술적 신호(골든/데드크로스, RSI 과열/과매도)는 발견되지 않았습니다.")
+
     st.markdown("---")
 
-    # --- 탭 구성 ---
-    tab1, tab2, tab3, tab4 = st.tabs([
+    # --- 탭 구성 (신규 탭 추가) ---
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 차트 분석", 
+        "💰 적립식 백테스팅", 
         "🔮 미래 가격 예측", 
         "⚖️ 종목 비교", 
         "📋 기업 정보"
@@ -107,54 +150,35 @@ try:
                 close=df['Close'], 
                 name="주가"
             ), 
-            row=1, 
-            col=1
+            row=1, col=1
         )
 
         if show_ma:
-            df['MA20'] = df['Close'].rolling(window=20).mean()
-            df['MA60'] = df['Close'].rolling(window=60).mean()
-            
             fig.add_trace(
                 go.Scatter(
-                    x=df.index, 
-                    y=df['MA20'], 
-                    mode='lines', 
-                    name='MA 20', 
+                    x=df.index, y=df['MA20'], 
+                    mode='lines', name='MA 20', 
                     line=dict(color='orange', width=1.5)
                 ), 
-                row=1, 
-                col=1
+                row=1, col=1
             )
             fig.add_trace(
                 go.Scatter(
-                    x=df.index, 
-                    y=df['MA60'], 
-                    mode='lines', 
-                    name='MA 60', 
+                    x=df.index, y=df['MA60'], 
+                    mode='lines', name='MA 60', 
                     line=dict(color='green', width=1.5)
                 ), 
-                row=1, 
-                col=1
+                row=1, col=1
             )
 
         if show_rsi:
-            delta = df['Close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            df['RSI'] = 100 - (100 / (1 + rs))
-
             fig.add_trace(
                 go.Scatter(
-                    x=df.index, 
-                    y=df['RSI'], 
-                    mode='lines', 
-                    name='RSI (14)', 
+                    x=df.index, y=df['RSI'], 
+                    mode='lines', name='RSI (14)', 
                     line=dict(color='purple', width=1.5)
                 ), 
-                row=2, 
-                col=1
+                row=2, col=1
             )
             fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
             fig.add_hline(y=30, line_dash="dash", line_color="blue", row=2, col=1)
@@ -167,24 +191,96 @@ try:
         st.plotly_chart(fig, use_container_width=True)
 
     # ==========================================
-    # TAB 2: 미래 가격 예측
+    # TAB 2: "그때 샀다면?" 적립식 백테스팅
     # ==========================================
     with tab2:
+        st.subheader("💡 '그때 매월 꾸준히 샀다면?' 적립식 투자 시뮬레이션")
+        st.write("선택한 조회 기간 동안 매월 첫 영업일에 일정 금액을 적립식으로 매수했을 때의 성과를 계산합니다.")
+
+        col_b1, col_b2 = st.columns(2)
+        default_amount = 100000 if ticker_symbol.endswith((".KS", ".KQ")) else 100
+        amount_unit = "원" if ticker_symbol.endswith((".KS", ".KQ")) else "달러($)"
+        
+        monthly_amount = col_b1.number_input(
+            f"매월 적립 투자 금액 ({amount_unit})", 
+            min_value=1000 if price_unit == "원" else 10, 
+            value=default_amount, 
+            step=10000 if price_unit == "원" else 50
+        )
+
+        # 월별 첫 번째 거래일 데이터 추출
+        df_monthly = df.resample('MS').first().dropna()
+
+        if not df_monthly.empty:
+            total_shares = 0.0
+            total_invested = 0.0
+            history_dates = []
+            portfolio_values = []
+            invested_values = []
+
+            for date, row in df_monthly.iterrows():
+                buy_price = row['Close']
+                shares_bought = monthly_amount / buy_price
+                total_shares += shares_bought
+                total_invested += monthly_amount
+
+                history_dates.append(date)
+                portfolio_values.append(total_shares * buy_price)
+                invested_values.append(total_invested)
+
+            current_portfolio_value = total_shares * current_price
+            total_profit = current_portfolio_value - total_invested
+            profit_rate = (total_profit / total_invested) * 100 if total_invested > 0 else 0
+
+            # 결과 요약 카드리포트
+            res_col1, res_col2, res_col3, res_col4 = st.columns(4)
+            
+            if price_unit == "$":
+                res_col1.metric("총 원금", f"${total_invested:,.2f}")
+                res_col2.metric("현재 평가금", f"${current_portfolio_value:,.2f}")
+                res_col3.metric("총 평가손익", f"${total_profit:+,.2f}", f"{profit_rate:+.2f}%")
+            else:
+                res_col1.metric("총 원금", f"{int(total_invested):,}원")
+                res_col2.metric("현재 평가금", f"{int(current_portfolio_value):,}원")
+                res_col3.metric("총 평가손익", f"{int(total_profit):+,}원", f"{profit_rate:+.2f}%")
+
+            res_col4.metric("총 보유 주식 수", f"{total_shares:.2f} 주")
+
+            # 자산 추이 시각화 그래프
+            fig_dca = go.Figure()
+            fig_dca.add_trace(go.Scatter(
+                x=history_dates, y=invested_values, 
+                mode='lines', name='누적 투자 원금', 
+                line=dict(color='gray', dash='dash')
+            ))
+            fig_dca.add_trace(go.Scatter(
+                x=history_dates, y=portfolio_values, 
+                mode='lines', name='포트폴리오 평가금액', 
+                line=dict(color='blue', width=2)
+            ))
+            fig_dca.update_layout(
+                title="시간 경과에 따른 적립 자산 추이",
+                xaxis_title="날짜",
+                yaxis_title=f"금액 ({amount_unit})",
+                height=450
+            )
+            st.plotly_chart(fig_dca, use_container_width=True)
+        else:
+            st.warning("백테스트를 계산할 충분한 기간 데이터가 없습니다.")
+
+    # ==========================================
+    # TAB 3: 미래 가격 예측
+    # ==========================================
+    with tab3:
         st.subheader("🎲 몬테카를로 시뮬레이션 기반 미래 주가 시나리오")
         col_p1, col_p2 = st.columns(2)
         sim_days = col_p1.slider(
             "예측 일수", 
-            min_value=10, 
-            max_value=252, 
-            value=60, 
-            step=10
+            min_value=10, max_value=252, value=60, step=10
         )
         num_simulations = col_p2.slider(
             "시뮬레이션 횟수", 
-            min_value=100, 
-            max_value=1000, 
-            value=300, 
-            step=100
+            min_value=100, max_value=1000, value=300, step=100
         )
 
         log_returns = np.log(1 + df['Close'].pct_change().dropna())
@@ -256,9 +352,9 @@ try:
         res_col3.metric("상위 10% (낙관적)", f"{np.percentile(final_prices, 90):.2f}")
 
     # ==========================================
-    # TAB 3: 종목 비교
+    # TAB 4: 종목 비교
     # ==========================================
-    with tab3:
+    with tab4:
         st.subheader("⚖️ 다중 종목 수익률 비교")
         compare_inputs = st.text_input(
             "비교할 티커 입력 (쉼표 구분)", 
@@ -302,9 +398,9 @@ try:
                 st.plotly_chart(fig_comp, use_container_width=True)
 
     # ==========================================
-    # TAB 4: 기업 정보
+    # TAB 5: 기업 정보
     # ==========================================
-    with tab4:
+    with tab5:
         st.subheader("기업 개요")
         st.write(info.get("summaryProfile", "설명 정보가 없습니다."))
         summary_data = {

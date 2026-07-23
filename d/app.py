@@ -16,11 +16,24 @@ st.set_page_config(
 st.sidebar.header("📌 기본 설정")
 
 # 티커 입력 (기본값: Apple)
-ticker_symbol = st.sidebar.text_input("기준 종목 티커 입력 (예: AAPL, NVDA, 005930.KS)", value="AAPL")
+ticker_symbol = st.sidebar.text_input(
+    "기준 종목 티커 입력 (예: AAPL, NVDA, 005930.KS)", 
+    value="AAPL"
+)
 
 # 기간 선택
-period_options = {"1개월": "1mo", "3개월": "3mo", "6개월": "6mo", "1년": "1y", "5년": "5y"}
-selected_period_label = st.sidebar.selectbox("조회 기간", list(period_options.keys()), index=3)
+period_options = {
+    "1개월": "1mo", 
+    "3개월": "3mo", 
+    "6개월": "6mo", 
+    "1년": "1y", 
+    "5년": "5y"
+}
+selected_period_label = st.sidebar.selectbox(
+    "조회 기간", 
+    list(period_options.keys()), 
+    index=3
+)
 period = period_options[selected_period_label]
 
 # 보조지표 선택
@@ -36,6 +49,7 @@ def load_stock_data(ticker, period_str):
     df = stock.history(period=period_str)
     info = stock.info
     return df, info
+
 
 try:
     df, info = load_stock_data(ticker_symbol, period)
@@ -83,22 +97,44 @@ try:
         row_heights = [0.7, 0.3] if show_rsi else [1.0]
 
         fig = make_subplots(
-            rows=rows, cols=1, 
+            rows=rows, 
+            cols=1, 
             shared_xaxes=True, 
             vertical_spacing=0.05,
             row_heights=row_heights
         )
 
-        fig.add_trace(go.Candlestick(
-            x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-            name="주가"
-        ), row=1, col=1)
+        fig.add_trace(
+            go.Candlestick(
+                x=df.index, 
+                open=df['Open'], 
+                high=df['High'], 
+                low=df['Low'], 
+                close=df['Close'],
+                name="주가"
+            ), 
+            row=1, col=1
+        )
 
         if show_ma:
             df['MA20'] = df['Close'].rolling(window=20).mean()
             df['MA60'] = df['Close'].rolling(window=60).mean()
-            fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], mode='lines', name='MA 20', line=dict(color='orange', width=1.5)), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], mode='lines', name='MA 60', line=dict(color='green', width=1.5)), row=1, col=1)
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df['MA20'], 
+                    mode='lines', name='MA 20', 
+                    line=dict(color='orange', width=1.5)
+                ), 
+                row=1, col=1
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df['MA60'], 
+                    mode='lines', name='MA 60', 
+                    line=dict(color='green', width=1.5)
+                ), 
+                row=1, col=1
+            )
 
         if show_rsi:
             delta = df['Close'].diff()
@@ -107,11 +143,22 @@ try:
             rs = gain / loss
             df['RSI'] = 100 - (100 / (1 + rs))
 
-            fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], mode='lines', name='RSI (14)', line=dict(color='purple', width=1.5)), row=2, col=1)
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df['RSI'], 
+                    mode='lines', name='RSI (14)', 
+                    line=dict(color='purple', width=1.5)
+                ), 
+                row=2, col=1
+            )
             fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
             fig.add_hline(y=30, line_dash="dash", line_color="blue", row=2, col=1)
 
-        fig.update_layout(height=600, xaxis_rangeslider_visible=False, margin=dict(l=20, r=20, t=20, b=20))
+        fig.update_layout(
+            height=600, 
+            xaxis_rangeslider_visible=False, 
+            margin=dict(l=20, r=20, t=20, b=20)
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     # ==========================================
@@ -122,8 +169,14 @@ try:
         st.write("과거 일일 수익률의 평균과 변동성을 이용해 미래 주가의 확률적 궤적을 가상 시뮬레이션합니다.")
 
         col_p1, col_p2 = st.columns(2)
-        sim_days = col_p1.slider("예측할 미래 일수 (Trading Days)", min_value=10, max_value=252, value=60, step=10)
-        num_simulations = col_p2.slider("시뮬레이션 횟수", min_value=100, max_value=2000, value=500, step=100)
+        sim_days = col_p1.slider(
+            "예측할 미래 일수 (Trading Days)", 
+            min_value=10, max_value=252, value=60, step=10
+        )
+        num_simulations = col_p2.slider(
+            "시뮬레이션 횟수", 
+            min_value=100, max_value=2000, value=500, step=100
+        )
 
         log_returns = np.log(1 + df['Close'].pct_change().dropna())
         u = log_returns.mean()
@@ -140,12 +193,7 @@ try:
 
         fig_sim = go.Figure()
         for i in range(min(num_simulations, 100)):
-            fig_sim.add_trace(go.Scatter(y=price_list[:, i], mode='lines', line=dict(width=0.5), opacity=0.3, showlegend=False))
-
-        mean_path = np.mean(price_list, axis=1)
-        p10_path = np.percentile(price_list, 10, axis=1)
-        p90_path = np.percentile(price_list, 90, axis=1)
-
-        fig_sim.add_trace(go.Scatter(y=mean_path, mode='lines', name='평균 예상 경로', line=dict(color='black', width=3)))
-        fig_sim.add_trace(go.Scatter(y=p90_path, mode='lines', name='상위 10% 비관/낙관 경계', line=dict(color='green', width=2, dash='dash')))
-        fig_sim.add_trace(go.Scatter(y=p10_path, mode='lines', name='하위 10% 경계', line=dict(color='red', width=2, dash='dash')))
+            fig_sim.add_trace(
+                go.Scatter(
+                    y=price_
+                    

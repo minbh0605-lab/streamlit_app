@@ -148,4 +148,4 @@ try:
 
         fig_sim.add_trace(go.Scatter(y=mean_path, mode='lines', name='평균 예상 경로', line=dict(color='black', width=3)))
         fig_sim.add_trace(go.Scatter(y=p90_path, mode='lines', name='상위 10% 비관/낙관 경계', line=dict(color='green', width=2, dash='dash')))
-        fig_sim.add_trace(go.Scatter(y=p10_path, mode='lines', name='하위
+        fig_sim.add_trace(go.Scatter(y=p10_path, mode='lines', name='하위 10% 경계', line=dict(color='red', width=2, dash='dash')))

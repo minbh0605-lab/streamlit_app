@@ -37,6 +37,7 @@ st.sidebar.subheader("📊 기술적 지표")
 show_ma = st.sidebar.checkbox("이동평균선 (20일, 60일)", value=True)
 show_rsi = st.sidebar.checkbox("RSI 지표 표시", value=True)
 
+
 # --- 데이터 로드 ---
 @st.cache_data(ttl=3600)
 def load_stock_data(ticker, period_str):
@@ -44,6 +45,7 @@ def load_stock_data(ticker, period_str):
     df = stock.history(period=period_str)
     info = stock.info
     return df, info
+
 
 try:
     df, info = load_stock_data(ticker_symbol, period)
@@ -81,7 +83,9 @@ try:
         "📋 기업 정보"
     ])
 
+    # ==========================================
     # TAB 1: 차트 분석
+    # ==========================================
     with tab1:
         rows = 2 if show_rsi else 1
         row_heights = [0.7, 0.3] if show_rsi else [1.0]
@@ -103,7 +107,8 @@ try:
                 close=df['Close'], 
                 name="주가"
             ), 
-            row=1, col=1
+            row=1, 
+            col=1
         )
 
         if show_ma:
@@ -112,19 +117,25 @@ try:
             
             fig.add_trace(
                 go.Scatter(
-                    x=df.index, y=df['MA20'], 
-                    mode='lines', name='MA 20', 
+                    x=df.index, 
+                    y=df['MA20'], 
+                    mode='lines', 
+                    name='MA 20', 
                     line=dict(color='orange', width=1.5)
                 ), 
-                row=1, col=1
+                row=1, 
+                col=1
             )
             fig.add_trace(
                 go.Scatter(
-                    x=df.index, y=df['MA60'], 
-                    mode='lines', name='MA 60', 
+                    x=df.index, 
+                    y=df['MA60'], 
+                    mode='lines', 
+                    name='MA 60', 
                     line=dict(color='green', width=1.5)
                 ), 
-                row=1, col=1
+                row=1, 
+                col=1
             )
 
         if show_rsi:
@@ -136,5 +147,176 @@ try:
 
             fig.add_trace(
                 go.Scatter(
-                    x=df.index, y=df['RSI'], 
-                    mode='lines', name='RSI (14)',
+                    x=df.index, 
+                    y=df['RSI'], 
+                    mode='lines', 
+                    name='RSI (14)', 
+                    line=dict(color='purple', width=1.5)
+                ), 
+                row=2, 
+                col=1
+            )
+            fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
+            fig.add_hline(y=30, line_dash="dash", line_color="blue", row=2, col=1)
+
+        fig.update_layout(
+            height=550, 
+            xaxis_rangeslider_visible=False, 
+            margin=dict(l=20, r=20, t=20, b=20)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ==========================================
+    # TAB 2: 미래 가격 예측
+    # ==========================================
+    with tab2:
+        st.subheader("🎲 몬테카를로 시뮬레이션 기반 미래 주가 시나리오")
+        col_p1, col_p2 = st.columns(2)
+        sim_days = col_p1.slider(
+            "예측 일수", 
+            min_value=10, 
+            max_value=252, 
+            value=60, 
+            step=10
+        )
+        num_simulations = col_p2.slider(
+            "시뮬레이션 횟수", 
+            min_value=100, 
+            max_value=1000, 
+            value=300, 
+            step=100
+        )
+
+        log_returns = np.log(1 + df['Close'].pct_change().dropna())
+        u = log_returns.mean()
+        var = log_returns.var()
+        drift = u - (0.5 * var)
+        stdev = log_returns.std()
+
+        daily_returns = np.exp(drift + stdev * np.random.normal(size=(sim_days, num_simulations)))
+        price_list = np.zeros_like(daily_returns)
+        price_list[0] = current_price
+
+        for t in range(1, sim_days):
+            price_list[t] = price_list[t - 1] * daily_returns[t]
+
+        fig_sim = go.Figure()
+        for i in range(min(num_simulations, 50)):
+            fig_sim.add_trace(
+                go.Scatter(
+                    y=price_list[:, i], 
+                    mode='lines', 
+                    line=dict(width=0.5), 
+                    opacity=0.2, 
+                    showlegend=False
+                )
+            )
+
+        mean_path = np.mean(price_list, axis=1)
+        p10_path = np.percentile(price_list, 10, axis=1)
+        p90_path = np.percentile(price_list, 90, axis=1)
+
+        fig_sim.add_trace(
+            go.Scatter(
+                y=mean_path, 
+                mode='lines', 
+                name='평균 예상 경로', 
+                line=dict(color='black', width=3)
+            )
+        )
+        fig_sim.add_trace(
+            go.Scatter(
+                y=p90_path, 
+                mode='lines', 
+                name='상위 10% 경계', 
+                line=dict(color='green', width=2, dash='dash')
+            )
+        )
+        fig_sim.add_trace(
+            go.Scatter(
+                y=p10_path, 
+                mode='lines', 
+                name='하위 10% 경계', 
+                line=dict(color='red', width=2, dash='dash')
+            )
+        )
+
+        fig_sim.update_layout(
+            title=f"{ticker_symbol.upper()} - 향후 {sim_days}일 예측", 
+            xaxis_title="일수", 
+            yaxis_title="예상 주가", 
+            height=450
+        )
+        st.plotly_chart(fig_sim, use_container_width=True)
+
+        final_prices = price_list[-1, :]
+        res_col1, res_col2, res_col3 = st.columns(3)
+        res_col1.metric("중앙값", f"{np.median(final_prices):.2f}")
+        res_col2.metric("하위 10% (비관적)", f"{np.percentile(final_prices, 10):.2f}")
+        res_col3.metric("상위 10% (낙관적)", f"{np.percentile(final_prices, 90):.2f}")
+
+    # ==========================================
+    # TAB 3: 종목 비교
+    # ==========================================
+    with tab3:
+        st.subheader("⚖️ 다중 종목 수익률 비교")
+        compare_inputs = st.text_input(
+            "비교할 티커 입력 (쉼표 구분)", 
+            value=f"{ticker_symbol}, MSFT, GOOGL, NVDA"
+        )
+        compare_tickers = [
+            t.strip().upper() 
+            for t in compare_inputs.split(",") 
+            if t.strip()
+        ]
+
+        if compare_tickers:
+            comp_df = pd.DataFrame()
+            for comp_ticker in compare_tickers:
+                try:
+                    c_data = yf.Ticker(comp_ticker).history(period=period)
+                    if not c_data.empty:
+                        comp_df[comp_ticker] = (
+                            (c_data['Close'] / c_data['Close'].iloc[0]) - 1
+                        ) * 100
+                except Exception:
+                    pass
+
+            if not comp_df.empty:
+                fig_comp = go.Figure()
+                for col in comp_df.columns:
+                    fig_comp.add_trace(
+                        go.Scatter(
+                            x=comp_df.index, 
+                            y=comp_df[col], 
+                            mode='lines', 
+                            name=col
+                        )
+                    )
+                fig_comp.update_layout(
+                    title="누적 수익률 비교 (%)", 
+                    xaxis_title="날짜", 
+                    yaxis_title="수익률 (%)", 
+                    height=450
+                )
+                st.plotly_chart(fig_comp, use_container_width=True)
+
+    # ==========================================
+    # TAB 4: 기업 정보
+    # ==========================================
+    with tab4:
+        st.subheader("기업 개요")
+        st.write(info.get("summaryProfile", "설명 정보가 없습니다."))
+        summary_data = {
+            "지표": ["시가총액", "배당수익률", "EPS", "PBR"],
+            "값": [
+                f"{info.get('marketCap', 0):,}",
+                f"{info.get('dividendYield', 0) * 100:.2f}%" if info.get('dividendYield') else "N/A",
+                f"{info.get('trailingEps', 'N/A')}",
+                f"{info.get('priceToBook', 'N/A')}"
+            ]
+        }
+        st.table(pd.DataFrame(summary_data))
+
+except Exception as e:
+    st.error(f"오류가 발생했습니다: {e}")
